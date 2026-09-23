@@ -26,7 +26,8 @@ def test_upload_persistence_and_tasks(tmp_path):
         assert task["responsible"] is None
         assert client.get("/tasks").json()[0]["dashboard_status"] == "overdue"
         assert client.patch(f"/tasks/{task['id']}", json={"status": "completed"}).status_code == 200
-        assert client.post(f"/meetings/{meeting['id']}/process").status_code == 501
+        assert client.post(f"/meetings/{meeting['id']}/process", json={}).status_code == 202
+        assert client.post(f"/meetings/{meeting['id']}/process", json={}).status_code == 409
     with client_at(tmp_path) as client:
         assert len(client.get("/meetings").json()) == 1
         assert client.get("/tasks").json()[0]["dashboard_status"] == "completed"

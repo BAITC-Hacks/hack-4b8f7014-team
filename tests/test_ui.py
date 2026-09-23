@@ -19,7 +19,7 @@ def test_dashboard_can_create_manual_task(tmp_path, monkeypatch):
     assert not ui.exception
     ui.text_input[0].set_value("Prepare meeting summary")
     ui.text_input[1].set_value("Reviewer")
-    ui.button[1].click().run()
+    ui.button(key="add_task").click().run()
     assert not ui.exception
     with TestClient(api) as client:
         tasks = client.get("/tasks").json()

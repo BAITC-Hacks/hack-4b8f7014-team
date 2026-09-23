@@ -3,10 +3,20 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 
+from app.adapters import PipelineError, readiness
 from app.config import Settings
-from app.schemas import Meeting, Task, TaskCreate, TaskUpdate
+from app.exports import export_docx, export_pdf
+from app.schemas import (
+    Meeting,
+    MinutesReview,
+    ProcessOptions,
+    Task,
+    TaskCreate,
+    TaskReview,
+    TaskUpdate,
+)
 from app.storage import Store
 
 ALLOWED_EXTENSIONS = {".wav", ".mp3", ".m4a", ".ogg", ".flac", ".mp4", ".mov", ".webm", ".mkv"}
@@ -21,7 +31,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @api.get("/health")
     def health():
-        return {"status": "ok", "inference": "not_implemented"}
+        return {"status": "ok", "local_assets": readiness(settings)}
 
     @api.get("/meetings", response_model=list[Meeting])
     def meetings():
@@ -57,11 +67,55 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await file.close()
 
-    @api.post("/meetings/{meeting_id}/process", status_code=501)
-    def process(meeting_id: UUID):
-        if not store.has_meeting(meeting_id):
-            raise HTTPException(404, "Meeting not found")
-        raise HTTPException(501, "Scaffold only: local inference pipeline is not wired yet")
+    @api.post("/meetings/{meeting_id}/process", status_code=202)
+    def process(meeting_id: UUID, options: ProcessOptions):
+        try:
+            return store.enqueue(meeting_id, options)
+        except KeyError as exc:
+            raise HTTPException(404, "Meeting not found") from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @api.get("/meetings/{meeting_id}/minutes")
+    def minutes_detail(meeting_id: UUID):
+        result = store.minutes(meeting_id)
+        if result is None:
+            raise HTTPException(404, "Minutes not available yet")
+        return result
+
+    @api.put("/meetings/{meeting_id}/minutes")
+    def review_minutes(meeting_id: UUID, review: MinutesReview):
+        try:
+            result = store.review_minutes(meeting_id, review)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        if result is None:
+            raise HTTPException(404, "Minutes not found")
+        return result
+
+    @api.get("/meetings/{meeting_id}/export/{format}")
+    def export(meeting_id: UUID, format: str):
+        if format not in {"pdf", "docx"}:
+            raise HTTPException(422, "Choose pdf or docx")
+        meeting, minutes = store.meeting(meeting_id), store.minutes(meeting_id)
+        if minutes is None:
+            raise HTTPException(404, "Minutes not found")
+        try:
+            body = (export_docx(meeting, minutes) if format == "docx"
+                    else export_pdf(meeting, minutes, settings.pdf_font))
+        except PipelineError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        media = ("application/pdf" if format == "pdf"
+                 else "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        return Response(body, media_type=media, headers={
+            "Content-Disposition": f'attachment; filename="minutes-{meeting_id}.{format}"'})
+
+    @api.put("/tasks/{task_id}", response_model=Task)
+    def review_task(task_id: UUID, review: TaskReview):
+        result = store.review_task(task_id, review)
+        if result is None:
+            raise HTTPException(404, "Task not found")
+        return result
 
     @api.get("/tasks")
     def tasks():
