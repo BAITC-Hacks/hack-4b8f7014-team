@@ -1,4 +1,5 @@
 """Offline adapters; heavyweight libraries load only in the worker."""
+import gc
 import json
 import os
 import re
@@ -12,6 +13,7 @@ from pathlib import Path
 import httpx
 from pydantic import BaseModel, Field, ValidationError
 
+from app.gpu import cuda_libraries
 from app.schemas import ReportPoint, Segment, TaskCreate, TaskStatus
 
 
@@ -59,11 +61,17 @@ class LocalSTT:
         self.settings = settings
 
     def transcribe(self, wav, options):
+        device = self.settings.stt_device or self.settings.device
+        with cuda_libraries(device):
+            return self._transcribe(wav, options, device)
+
+    def _transcribe(self, wav, options, device):
         offline_environment()
         from faster_whisper import WhisperModel
 
         model = WhisperModel(str(self.settings.stt_model_dir.resolve()),
-                             device=self.settings.device, compute_type=self.settings.compute_type,
+                             device=device, compute_type=(self.settings.stt_compute_type
+                                                          or self.settings.compute_type),
                              local_files_only=True)
         language = options.language if options.language in {"ru", "kk"} else None
         segments, _ = model.transcribe(str(wav), language=language, vad_filter=True,
@@ -74,6 +82,8 @@ class LocalSTT:
                 result.extend(Segment(start=w.start, end=w.end, text=w.word) for w in segment.words)
             elif segment.text.strip():
                 result.append(Segment(start=segment.start, end=segment.end, text=segment.text))
+        del model
+        gc.collect()
         if not result:
             raise PipelineError("Речь не обнаружена")
         return result
@@ -191,6 +201,7 @@ class LocalExtractor:
             for chunk in transcript_chunks(segments):
                 response = client.post("/api/chat", json={
                     "model": self.settings.ollama_model, "stream": False,
+                    "keep_alive": 0 if (self.settings.stt_device or self.settings.device) == "cuda" else "5m",
                     "format": Extraction.model_json_schema(),
                     "options": {"temperature": 0, "num_ctx": 8192},
                     "messages": [{"role": "system", "content": system}, {"role": "user",
@@ -212,6 +223,7 @@ class LocalExtractor:
                         try:
                             repair_response = client.post("/api/chat", json={
                                 "model": self.settings.ollama_model, "stream": False,
+                                "keep_alive": 0 if (self.settings.stt_device or self.settings.device) == "cuda" else "5m",
                                 "format": EvidenceRepair.model_json_schema(),
                                 "options": {"temperature": 0, "num_ctx": 8192},
                                 "messages": [{"role": "system", "content":

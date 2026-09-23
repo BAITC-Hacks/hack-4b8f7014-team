@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     ffmpeg: str = "ffmpeg"
     device: str = "cpu"
     compute_type: str = "int8"
+    stt_device: str | None = None
+    stt_compute_type: str | None = None
     max_audio_seconds: int = Field(default=7200, ge=1, le=14400)
     pdf_font: Path = Path("static/fonts/DejaVuSans.ttf")
 

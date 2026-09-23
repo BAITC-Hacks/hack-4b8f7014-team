@@ -8,12 +8,14 @@ from huggingface_hub import HfApi, snapshot_download
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("component", choices=["whisper", "diarization"])
+    parser.add_argument("component", choices=["whisper", "whisper-large-v3", "diarization"])
+    parser.add_argument("--revision", help="Pin a model revision for repeatable provisioning")
     args = parser.parse_args()
-    repo = ("Systran/faster-whisper-small" if args.component == "whisper"
-            else "pyannote/speaker-diarization-community-1")
+    repo = {"whisper": "Systran/faster-whisper-small",
+            "whisper-large-v3": "Systran/faster-whisper-large-v3",
+            "diarization": "pyannote/speaker-diarization-community-1"}[args.component]
     target = Path("models") / args.component
-    revision = HfApi().model_info(repo).sha
+    revision = HfApi().model_info(repo, revision=args.revision).sha
     snapshot_download(repo, revision=revision, local_dir=target,
                       ignore_patterns=["*.md", ".gitattributes"])
     (target / "provisioning.json").write_text(
