@@ -28,17 +28,29 @@ if health:
     st.caption("Проверка файлов не подтверждает запуск Ollama и фонового обработчика.")
 
 file = st.file_uploader("Аудио или видео", type=["wav", "mp3", "m4a", "ogg", "flac", "mp4", "mov", "webm", "mkv"])
-if st.button("Upload", disabled=file is None):
+if file is not None:
+    st.caption(f"Выбран файл «{file.name}». Нажмите «Загрузить запись», затем «Обработать запись».")
+if st.button("Загрузить запись", disabled=file is None):
     result = request("POST", "/meetings", files={"file": (file.name, file.getvalue(), file.type)})
     if result:
-        st.success("Saved locally")
+        st.session_state["meeting_selection"] = result["id"]
+        st.success("Запись сохранена и выбрана ниже. Теперь можно запустить обработку.")
 
 meetings = request("GET", "/meetings")
 if meetings:
-    selected = st.selectbox("Meeting", meetings, format_func=lambda m: f"{m['filename']} ({m['id'][:8]})")
+    by_id = {m["id"]: m for m in meetings}
+    if st.session_state.get("meeting_selection") not in by_id:
+        st.session_state["meeting_selection"] = meetings[0]["id"]
+    selected_id = st.selectbox("Выбранная запись", list(by_id), key="meeting_selection",
+                               format_func=lambda mid: f"{by_id[mid]['filename']} ({mid[:8]})")
+    selected = by_id[selected_id]
     st.write("Состояние:", selected["status"], selected.get("stage") or "")
     if selected.get("error"):
         st.error(selected["error"])
+    if selected["status"] == "completed":
+        st.success("Эта запись уже обработана. Результат находится ниже. Для другого файла сначала нажмите «Загрузить запись».")
+    elif selected["status"] in {"queued", "running"}:
+        st.info("Эта запись уже в обработке. Нажмите «Обновить состояние», чтобы проверить результат.")
     with st.form("process"):
         language = st.selectbox("Язык записи", ["auto", "ru", "kk", "mixed"])
         known_date = st.checkbox("Дата совещания известна")
