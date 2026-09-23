@@ -21,6 +21,12 @@ def test_live_rejects_external_origin_and_invalid_device(tmp_path, monkeypatch):
                            headers={"origin": "https://foreign.example"}).status_code == 403
         assert client.post("/live/start", json={"device_index": 99}).status_code == 409
         assert client.post("/live/stop").status_code == 202
+        meeting = client.post("/meetings", files={"file": ("queued.wav", b"test")}).json()
+        assert client.post(f"/meetings/{meeting['id']}/process", json={}).status_code == 202
+        assert client.post("/live/start", json={"device_index": 2}).status_code == 409
+        other = client.post("/meetings", files={"file": ("other.wav", b"test")}).json()
+        client.app.state.live_recorder.state = {"status": "recording"}
+        assert client.post(f"/meetings/{other['id']}/process", json={}).status_code == 409
 
 
 def test_live_chunk_is_valid_and_offsets_are_preserved(tmp_path, monkeypatch):

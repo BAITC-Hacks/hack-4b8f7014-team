@@ -20,11 +20,11 @@ Do not expose the Ollama port to users or the internet.
 5. Run under a dedicated non-admin account, restrict filesystem access to `data/`, encrypt
    storage/backups as required, set upload limits at the reverse proxy, and deny outbound
    network access at the host firewall. Streamlit analytics are disabled in committed config.
-6. Test upload/task operations with internet disconnected. Once implemented, test the whole
+6. Test upload/task operations with internet disconnected. Test the implemented whole
    pipeline offline with missing-weight failures and network capture. Document hardware and
    benchmark results before claiming on-prem readiness.
 
-Use service supervision for FastAPI, Streamlit, future worker and Ollama. Persist `data/` and
+Use service supervision for FastAPI, Streamlit, worker and Ollama. Persist `data/` and
 model directories across restarts. Establish retention/deletion, backups and restore testing;
 avoid transcript content in application logs. The scaffold does not implement encryption,
 user management, malware scanning, scheduling or production deployment automation.

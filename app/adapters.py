@@ -228,7 +228,7 @@ class LocalExtractor:
                           trust_env=False, follow_redirects=False) as client:
             for chunk in transcript_chunks(segments):
                 response = client.post("/api/chat", json={
-                    "model": self.settings.ollama_model, "stream": False,
+                    "model": self.settings.ollama_model, "stream": False, "think": False,
                     "keep_alive": 0 if (self.settings.stt_device or self.settings.device) == "cuda" else "5m",
                     "format": Extraction.model_json_schema(),
                     "options": {"temperature": 0, "num_ctx": 8192},
@@ -250,7 +250,7 @@ class LocalExtractor:
                         # One bounded repair; failure does not discard other tasks or the transcript.
                         try:
                             repair_response = client.post("/api/chat", json={
-                                "model": self.settings.ollama_model, "stream": False,
+                                "model": self.settings.ollama_model, "stream": False, "think": False,
                                 "keep_alive": 0 if (self.settings.stt_device or self.settings.device) == "cuda" else "5m",
                                 "format": EvidenceRepair.model_json_schema(),
                                 "options": {"temperature": 0, "num_ctx": 8192},

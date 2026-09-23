@@ -72,6 +72,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @api.post("/meetings/{meeting_id}/process", status_code=202)
     def process(meeting_id: UUID, options: ProcessOptions):
+        if api.state.live_recorder.snapshot()["status"] in {"starting", "recording", "finishing"}:
+            raise HTTPException(409, "Сначала остановите живую запись и дождитесь завершения её черновика")
         try:
             return store.enqueue(meeting_id, options)
         except KeyError as exc:

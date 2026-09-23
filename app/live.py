@@ -46,6 +46,8 @@ class LiveRecorder:
         with self.lock:
             if self.thread and self.thread.is_alive():
                 raise PipelineError("Предыдущая запись ещё обрабатывается")
+            if any(m.status in {"queued", "running"} for m in self.store.meetings()):
+                raise PipelineError("Дождитесь окончания обработки загруженных записей перед живым режимом")
             if device_index not in {d["index"] for d in devices()}:
                 raise PipelineError("Выберите устройство системного звука из списка")
             mid = uuid4()
