@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 
 class TaskStatus(StrEnum):
@@ -34,9 +34,18 @@ class TaskCreate(BaseModel):
     evidence: str | None = None
     evidence_status: Literal["manual", "verified", "unverified"] = "manual"
     proposed_evidence: str | None = None
+    responsible_evidence: str | None = None
+    deadline_evidence: str | None = None
+    review_warnings: list[str] = Field(default_factory=list)
     urgency: str | None = None
     category: str | None = None
     status: TaskStatus = TaskStatus.pending
+
+    @computed_field
+    @property
+    def source_speaker_id(self) -> str | None:
+        """Explicit source name; speaker_id remains compatible with saved records."""
+        return self.speaker_id
 
 
 class Task(TaskCreate):
@@ -61,6 +70,14 @@ class TaskReview(TaskCreate):
 class ProcessOptions(BaseModel):
     language: Literal["auto", "ru", "kk", "mixed"] = "auto"
     meeting_date: date | None = None
+    participant_names: list[str] = Field(default_factory=list, max_length=50)
+
+    @field_validator("participant_names")
+    @classmethod
+    def valid_names(cls, names):
+        if any(not name.strip() or len(name) > 100 for name in names):
+            raise ValueError("Participant names must contain 1–100 characters")
+        return list(dict.fromkeys(name.strip() for name in names))
 
 
 class ReportPoint(BaseModel):

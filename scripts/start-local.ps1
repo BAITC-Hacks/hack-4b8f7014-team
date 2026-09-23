@@ -7,6 +7,8 @@ New-Item -ItemType Directory -Force data | Out-Null
 $ollamaExe = Join-Path $projectDir 'data/runtime/ollama/ollama.exe'
 $env:OLLAMA_MODELS = Join-Path $projectDir 'models/ollama'
 $env:OLLAMA_NO_CLOUD = '1'
+$env:OLLAMA_FLASH_ATTENTION = '1'
+$env:OLLAMA_KV_CACHE_TYPE = 'q8_0'
 $env:OLLAMA_HOST = '127.0.0.1:11434'
 if (-not (Get-NetTCPConnection -LocalPort 11434 -State Listen -ErrorAction SilentlyContinue)) {
     if (-not (Test-Path $ollamaExe)) { throw 'Install the portable Ollama runtime in data/runtime/ollama first.' }

@@ -75,6 +75,8 @@ class LocalSTT:
                              local_files_only=True)
         language = options.language if options.language in {"ru", "kk"} else None
         segments, _ = model.transcribe(str(wav), language=language, vad_filter=True,
+                                       initial_prompt=("Имена участников: " + ", ".join(options.participant_names)
+                                                       if options.participant_names else None),
                                        word_timestamps=True, multilingual=options.language == "mixed")
         result = []
         for segment in segments:
@@ -89,7 +91,7 @@ class LocalSTT:
         return result
 
 
-def align_speakers(segments, turns):
+def align_speakers(segments, turns, bridge_gaps=False):
     attributed = []
     for segment in segments:
         scores = defaultdict(float)
@@ -101,15 +103,34 @@ def align_speakers(segments, turns):
         if ranked and ranked[0][1] > duration * 0.5:
             if len(ranked) == 1 or ranked[0][1] > ranked[1][1] * 1.5:
                 speaker = ranked[0][0]
-        current = segment.model_copy(update={"speaker_id": speaker})
-        if (attributed and attributed[-1].speaker_id == speaker
-                and 0 <= current.start - attributed[-1].end <= 1
-                and len(attributed[-1].text) + len(current.text) < 1500):
-            attributed[-1].text += " " + current.text.strip()
-            attributed[-1].end = current.end
+        if duration == 0:
+            active = {label for start, end, label in turns if start <= segment.start < end}
+            if len(active) == 1:
+                speaker = active.pop()
+        attributed.append(segment.model_copy(update={"speaker_id": speaker}))
+    if bridge_gaps:
+        for i, current in enumerate(attributed):
+            if current.speaker_id is not None or i == 0 or i == len(attributed) - 1:
+                continue
+            before, after = attributed[i - 1], attributed[i + 1]
+            # Repair a short timing gap only between two agreeing known labels.
+            # Never bridge a speaker change, a long pause, or an overlap.
+            if (before.speaker_id and before.speaker_id == after.speaker_id
+                    and after.start - before.end <= 1.5):
+                labels = {label for start, end, label in turns
+                          if max(start, current.start) < min(end, current.end)}
+                if labels == {before.speaker_id}:
+                    current.speaker_id = before.speaker_id
+    merged = []
+    for current in attributed:
+        if (merged and merged[-1].speaker_id == current.speaker_id
+                and 0 <= current.start - merged[-1].end <= 1
+                and len(merged[-1].text) + len(current.text) < 1500):
+            merged[-1].text += " " + current.text.strip()
+            merged[-1].end = current.end
         else:
-            attributed.append(current)
-    return attributed
+            merged.append(current)
+    return merged
 
 
 class LocalDiarizer:
@@ -130,8 +151,15 @@ class LocalDiarizer:
             samples = np.frombuffer(audio.readframes(audio.getnframes()), dtype="<i2")
         waveform = torch.from_numpy(samples.astype(np.float32) / 32768.0).unsqueeze(0)
         output = pipeline({"waveform": waveform, "sample_rate": rate})
-        turns = [(turn.start, turn.end, speaker) for turn, speaker in output.speaker_diarization]
-        return align_speakers(segments, turns)
+        regular = [(turn.start, turn.end, speaker) for turn, speaker in output.speaker_diarization]
+        exclusive = [(turn.start, turn.end, speaker)
+                     for turn, speaker in output.exclusive_speaker_diarization]
+        directory = self.settings.data_dir / "diarization"
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / f"{Path(wav).stem}.json").write_text(
+            json.dumps({"regular": regular, "exclusive": exclusive}), encoding="utf-8")
+        turns = exclusive if self.settings.exclusive_diarization else regular
+        return align_speakers(segments, turns, bridge_gaps=self.settings.exclusive_diarization)
 
 
 class ExtractedTask(TaskCreate):

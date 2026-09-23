@@ -60,9 +60,12 @@ if meetings:
         language = st.selectbox("Язык записи", ["auto", "ru", "kk", "mixed"])
         known_date = st.checkbox("Дата совещания известна")
         meeting_date = st.date_input("Дата совещания")
+        participant_names = st.text_area("Имена участников, если известны — по одному на строке")
+        st.caption("Имена помогают распознаванию слов, но не назначают имена голосам автоматически.")
         if st.form_submit_button("Обработать запись", disabled=selected["status"] not in {"uploaded", "failed"}):
             if request("POST", f"/meetings/{selected['id']}/process", json={
-                "language": language, "meeting_date": meeting_date.isoformat() if known_date else None}):
+                "language": language, "meeting_date": meeting_date.isoformat() if known_date else None,
+                "participant_names": [n.strip() for n in participant_names.splitlines() if n.strip()]}):
                 st.rerun()
     if st.button("Обновить состояние"):
         st.rerun()
@@ -78,7 +81,16 @@ if meetings:
                     num_rows="dynamic", key=f"report_{selected['id']}",
                     column_config={"direction": "Направление / доклад", "indicator": "Показатель", "problem": "Проблема"})
                 labels = sorted({s["speaker_id"] for s in minutes["transcript"] if s["speaker_id"]})
-                speakers = {label: st.text_input(f"Имя для {label}", minutes["speakers"].get(label, "")) for label in labels}
+                speakers = {}
+                names = selected.get("options", {}).get("participant_names", [])
+                for label in labels:
+                    current_name = minutes["speakers"].get(label, "")
+                    if names:
+                        choices = list(dict.fromkeys(["", *names, current_name]))
+                        speakers[label] = st.selectbox(f"Имя для {label}", choices,
+                                                       index=choices.index(current_name))
+                    else:
+                        speakers[label] = st.text_input(f"Имя для {label}", current_name)
                 if st.form_submit_button("Сохранить саммари и имена"):
                     request("PUT", f"/meetings/{selected['id']}/minutes", json={
                         "summary": summary, "speakers": {k: v for k, v in speakers.items() if v},
@@ -131,10 +143,19 @@ if tasks:
             st.warning("Цитата не подтверждена. Проверьте само поручение, ответственного и срок по транскрипту.")
             st.caption("Неподтверждённая цитата модели: " + (chosen.get("proposed_evidence") or "—"))
         st.caption("Основание: " + (chosen["evidence"] or "Нет подтверждённой цитаты"))
+        st.caption("Цитата подтверждает наличие текста, а не правильность всех полей поручения.")
+        for warning in chosen.get("review_warnings", []):
+            st.warning(warning)
+        if chosen.get("responsible_evidence"):
+            st.caption("Основание для ответственного: " + chosen["responsible_evidence"])
+        if chosen.get("deadline_evidence"):
+            st.caption("Основание для срока: " + chosen["deadline_evidence"])
+        deadline_text = st.text_input("Срок словами", chosen.get("deadline_text") or "")
         reviewed = st.checkbox("Поручение, ответственный и срок проверены", not chosen["needs_review"])
         if st.form_submit_button("Сохранить проверку"):
             payload = {k: v for k, v in chosen.items() if k not in {"id", "meeting_id", "dashboard_status"}}
             payload.update(description=description, responsible=responsible or None,
+                           deadline_text=deadline_text or None,
                            deadline=deadline or None, needs_review=not reviewed)
             if request("PUT", f"/tasks/{chosen['id']}", json=payload):
                 st.rerun()

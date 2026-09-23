@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     diarization_model_dir: Path = Path("models/diarization")
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen2.5:7b"
+    grounded_extraction: bool = False
+    exclusive_diarization: bool = False
     ffmpeg: str = "ffmpeg"
     device: str = "cpu"
     compute_type: str = "int8"

@@ -179,6 +179,9 @@ class Store:
             for (payload,) in rows:
                 task = Task.model_validate_json(payload)
                 task.needs_review = True
+                task.responsible_evidence = None
+                task.deadline_evidence = None
+                task.review_warnings = ["Транскрипт изменён: перепроверьте ответственного и срок"]
                 if task.evidence:
                     matches = [s for s in segments if task.evidence in s.text]
                     if not matches:

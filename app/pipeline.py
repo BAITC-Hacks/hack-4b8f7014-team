@@ -9,6 +9,7 @@ from app.adapters import (
     normalize,
     readiness,
 )
+from app.extraction import GroundedExtractor
 from app.schemas import Minutes, Task
 
 
@@ -17,7 +18,8 @@ class Pipeline:
         self.settings = settings
         self.stt = stt or LocalSTT(settings)
         self.diarizer = diarizer or LocalDiarizer(settings)
-        self.extractor = extractor or LocalExtractor(settings)
+        self.extractor = extractor or (GroundedExtractor(settings) if settings.grounded_extraction
+                                       else LocalExtractor(settings))
 
     def run(self, meeting, progress):
         missing = [key for key, ok in readiness(self.settings).items()
