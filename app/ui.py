@@ -88,6 +88,18 @@ if meetings:
                 for segment in minutes["transcript"]:
                     name = minutes["speakers"].get(segment["speaker_id"], segment["speaker_id"] or "Неизвестный")
                     st.text(f"[{segment['start']:.1f}–{segment['end']:.1f}] {name}: {segment['text']}")
+            with st.expander("Исправить текст и говорящих"):
+                st.caption("Исправьте распознанные слова и метку говорящего. После изменения проверьте саммари, таблицу отчёта и поручения: они не пересчитываются автоматически.")
+                with st.form(f"transcript_{selected['id']}"):
+                    edited = st.data_editor(minutes["transcript"],
+                        disabled=["start", "end"], key=f"transcript_rows_{selected['id']}",
+                        column_config={"start": "Начало, с", "end": "Конец, с",
+                                       "text": "Реплика", "speaker_id": "Говорящий (SPEAKER_00 и т. д.)"})
+                    if st.form_submit_button("Сохранить исправленный транскрипт"):
+                        for segment in edited:
+                            segment["speaker_id"] = segment.get("speaker_id") or None
+                        if request("PUT", f"/meetings/{selected['id']}/transcript", json={"transcript": edited}):
+                            st.rerun()
             for extension in ("docx", "pdf"):
                 if st.button(f"Подготовить {extension.upper()}"):
                     content = request("GET", f"/meetings/{selected['id']}/export/{extension}", binary=True)

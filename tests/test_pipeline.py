@@ -43,6 +43,14 @@ def test_queue_recovery_review_and_export(tmp_path):
     assert text.index("Текст совещания") < text.index("Саммари по ключевым пунктам") < text.index("Поручения")
     assert len(document.tables) == 2
     assert [cell.text for cell in document.tables[1].rows[0].cells] == ["Поручение", "Ответственный", "Срок"]
+    task = minutes.tasks[0]
+    store.review_task(task.id, TaskReview(description=task.description, evidence="Подготовить отчёт",
+                                         evidence_status="verified", needs_review=False))
+    revised = store.review_transcript(meeting.id, [Segment(start=0, end=2, text="Обсудить договор", speaker_id="S1")])
+    assert revised.tasks[0].needs_review
+    assert revised.tasks[0].evidence_status == "unverified"
+    assert revised.tasks[0].evidence is None
+    assert revised.tasks[0].speaker_id is None
     with pytest.raises(PipelineError):
         export_pdf(meeting, minutes, tmp_path / "missing.ttf")
     with pytest.raises(ValueError):

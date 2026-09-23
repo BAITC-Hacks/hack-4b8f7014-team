@@ -77,6 +77,10 @@ class MinutesReview(BaseModel):
     report_points: list[ReportPoint] | None = None
 
 
+class TranscriptReview(BaseModel):
+    transcript: list[Segment] = Field(min_length=1)
+
+
 class Meeting(BaseModel):
     id: UUID
     filename: str

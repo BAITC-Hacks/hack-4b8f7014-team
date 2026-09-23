@@ -18,6 +18,7 @@ from app.schemas import (
     TaskCreate,
     TaskReview,
     TaskUpdate,
+    TranscriptReview,
 )
 from app.storage import Store
 
@@ -97,6 +98,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if path.is_file():
                 return [Segment.model_validate(s) for s in json.loads(path.read_text(encoding="utf-8"))]
         return []
+
+    @api.put("/meetings/{meeting_id}/transcript")
+    def review_transcript(meeting_id: UUID, review: TranscriptReview):
+        result = store.review_transcript(meeting_id, review.transcript)
+        if result is None:
+            raise HTTPException(404, "Minutes not found")
+        return result
 
     @api.put("/meetings/{meeting_id}/minutes")
     def review_minutes(meeting_id: UUID, review: MinutesReview):

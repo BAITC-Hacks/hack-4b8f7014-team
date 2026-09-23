@@ -165,6 +165,32 @@ class Store:
                        (task.model_dump_json(), str(task_id)))
             return task
 
+    def review_transcript(self, meeting_id, segments):
+        with closing(self.connect()) as db, db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT payload FROM minutes WHERE meeting_id = ?", (str(meeting_id),)).fetchone()
+            if not row:
+                return None
+            minutes = Minutes.model_validate_json(row[0])
+            minutes.transcript = segments
+            db.execute("UPDATE minutes SET payload = ? WHERE meeting_id = ?",
+                       (minutes.model_dump_json(), str(meeting_id)))
+            rows = db.execute("SELECT payload FROM tasks WHERE meeting_id = ?", (str(meeting_id),)).fetchall()
+            for (payload,) in rows:
+                task = Task.model_validate_json(payload)
+                task.needs_review = True
+                if task.evidence:
+                    matches = [s for s in segments if task.evidence in s.text]
+                    if not matches:
+                        task.proposed_evidence = task.evidence
+                        task.evidence = None
+                        task.evidence_status = "unverified"
+                        task.speaker_id = None
+                    else:
+                        task.speaker_id = matches[0].speaker_id if len(matches) == 1 else None
+                db.execute("UPDATE tasks SET payload = ? WHERE id = ?", (task.model_dump_json(), str(task.id)))
+        return self.minutes(meeting_id)
+
     def add_task(self, task: Task):
         with closing(self.connect()) as db, db:
             db.execute("INSERT INTO tasks VALUES (?, ?, ?)",
