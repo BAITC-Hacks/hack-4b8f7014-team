@@ -1,0 +1,2 @@
+-r requirements.txt
+PyAudioWPatch==0.2.12.8; sys_platform == "win32"

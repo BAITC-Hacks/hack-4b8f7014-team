@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen2.5:7b"
     grounded_extraction: bool = False
     exclusive_diarization: bool = False
+    live_stt_model_dir: Path = Path("models/whisper")
+    live_chunk_seconds: int = Field(default=20, ge=5, le=60)
     ffmpeg: str = "ffmpeg"
     device: str = "cpu"
     compute_type: str = "int8"

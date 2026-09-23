@@ -161,4 +161,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(404, "Task not found")
         return task
 
+    from app.live import register_live
+    register_live(api, settings, store)
     return api

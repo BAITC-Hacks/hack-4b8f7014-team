@@ -27,6 +27,55 @@ if health:
         st.warning("Требуется настройка локальных компонентов: " + ", ".join(missing))
     st.caption("Проверка файлов не подтверждает запуск Ollama и фонового обработчика.")
 
+with st.expander("Живое совещание — Teams / Zoom на этом компьютере"):
+    st.write("Выберите наушники или колонки, через которые слышите собеседников. "
+             "В Teams/Zoom должно быть выбрано то же устройство. Затем включите запись.")
+    st.warning("Записывается весь звук выбранного устройства. Собственный микрофон пока не захватывается. "
+               "Приложение не входит в звонок автоматически — войдите в Teams/Zoom сами.")
+    if st.button("Показать устройства звука"):
+        st.session_state["live_devices"] = request("GET", "/live/devices") or []
+    available = st.session_state.get("live_devices", [])
+    if available:
+        audio_device = st.selectbox("Звук совещания", available, format_func=lambda d: d["name"])
+        live_language = st.selectbox("Язык живого совещания", ["auto", "ru", "kk", "mixed"])
+        live_names = st.text_area("Участники живого совещания — по одному имени на строке")
+        if st.button("Начать живую запись", type="primary"):
+            if request("POST", "/live/start", json={"device_index": audio_device["index"],
+                "options": {"language": live_language,
+                            "participant_names": [n.strip() for n in live_names.splitlines() if n.strip()]}}):
+                st.success("Запуск записи. Можно перейти в Teams/Zoom.")
+    if st.button("Остановить и сформировать итоговый протокол"):
+        request("POST", "/live/stop")
+
+    @st.fragment(run_every="3s")
+    def live_preview():
+        live = request("GET", "/live")
+        if not live or live["status"] == "idle":
+            return
+        labels = {"starting": "Запуск", "recording": "Идёт запись", "finishing": "Завершаем черновик",
+                  "queued": "Полная запись передана на итоговую обработку", "failed": "Ошибка"}
+        st.write(labels.get(live["status"], live["status"]), f"· {live.get('seconds', 0):.0f} с")
+        st.caption("Живой текст обновляется фрагментами по 20 секунд с задержкой распознавания. "
+                   "Саммари и поручения — предварительные; голоса разделяются после остановки.")
+        for field in ("error", "capture_error"):
+            if live.get(field):
+                st.error(live[field])
+        if live.get("warnings"):
+            st.warning(live["warnings"][-1])
+        if live.get("transcript"):
+            st.session_state["live_text_preview"] = " ".join(s["text"].strip() for s in live["transcript"])
+            st.text_area("Живой текст", height=180,
+                         disabled=True, key="live_text_preview")
+        if live.get("summary"):
+            st.write("Черновик саммари:", live["summary"])
+        for task in live.get("tasks", []):
+            st.write("•", task["description"], "—", task.get("responsible") or "Ответственный не установлен",
+                     "—", task.get("deadline_text") or "Срок не установлен")
+        if live.get("meeting_id"):
+            st.info("Итоговый протокол появится в списке записей. Нажмите «Обновить состояние» ниже.")
+
+    live_preview()
+
 file = st.file_uploader("Аудио или видео", type=["wav", "mp3", "m4a", "ogg", "flac", "mp4", "mov", "webm", "mkv"])
 if file is not None:
     st.caption(f"Выбран файл «{file.name}». Нажмите «Загрузить запись», затем «Обработать запись».")
@@ -119,22 +168,29 @@ if meetings:
                         st.download_button("Скачать " + extension.upper(), content,
                                            file_name=f"minutes.{extension}", key=extension)
     with st.form("manual_task"):
-        description = st.text_input("Task")
-        responsible = st.text_input("Responsible person (leave blank if unknown)")
-        has_deadline = st.checkbox("Deadline is known")
-        deadline = st.date_input("Deadline")
-        if st.form_submit_button("Add task for review", key="add_task") and description.strip():
+        description = st.text_input("Добавить поручение вручную")
+        responsible = st.text_input("Ответственный — оставьте пустым, если неизвестен")
+        has_deadline = st.checkbox("Срок известен")
+        deadline = st.date_input("Дата исполнения")
+        if st.form_submit_button("Добавить поручение на проверку", key="add_task") and description.strip():
             request("POST", f"/meetings/{selected['id']}/tasks", json={
                 "description": description, "responsible": responsible or None,
                 "deadline": deadline.isoformat() if has_deadline else None})
 
-st.subheader("Task dashboard")
+st.subheader("Дашборд поручений")
 tasks = request("GET", "/tasks")
+if tasks and meetings and st.checkbox("Только поручения выбранного совещания", value=True):
+    tasks = [t for t in tasks if t["meeting_id"] == selected_id]
 if tasks:
-    status_filter = st.selectbox("Filter", ["all", "pending", "in_progress", "overdue", "completed"])
+    status_names = {"all": "Все", "pending": "Ожидает", "in_progress": "В работе",
+                    "overdue": "Просрочено", "completed": "Выполнено"}
+    status_filter = st.selectbox("Статус", list(status_names), format_func=status_names.get)
     shown = [t for t in tasks if status_filter == "all" or t["dashboard_status"] == status_filter]
-    st.dataframe(shown, width="stretch")
-    chosen = st.selectbox("Update task", tasks, format_func=lambda t: t["description"])
+    st.dataframe([{"Поручение": t["description"], "Ответственный": t["responsible"],
+                   "Срок": t.get("deadline") or t.get("deadline_text"),
+                   "Статус": status_names[t["dashboard_status"]],
+                   "Требует проверки": t["needs_review"]} for t in shown], width="stretch")
+    chosen = st.selectbox("Проверить или изменить поручение", tasks, format_func=lambda t: t["description"])
     with st.form(f"review_{chosen['id']}"):
         description = st.text_area("Поручение", chosen["description"])
         responsible = st.text_input("Ответственный", chosen["responsible"] or "")
@@ -159,6 +215,6 @@ if tasks:
                            deadline=deadline or None, needs_review=not reviewed)
             if request("PUT", f"/tasks/{chosen['id']}", json=payload):
                 st.rerun()
-    status = st.selectbox("New status", ["pending", "in_progress", "completed"])
-    if st.button("Save status") and request("PATCH", f"/tasks/{chosen['id']}", json={"status": status}):
+    status = st.selectbox("Новый статус", ["pending", "in_progress", "completed"], format_func=status_names.get)
+    if st.button("Сохранить статус") and request("PATCH", f"/tasks/{chosen['id']}", json={"status": status}):
         st.rerun()
