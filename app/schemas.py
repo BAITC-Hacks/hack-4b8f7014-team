@@ -32,6 +32,8 @@ class TaskCreate(BaseModel):
     deadline: date | None = None
     deadline_text: str | None = None
     evidence: str | None = None
+    evidence_status: Literal["manual", "verified", "unverified"] = "manual"
+    proposed_evidence: str | None = None
     urgency: str | None = None
     category: str | None = None
     status: TaskStatus = TaskStatus.pending

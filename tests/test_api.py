@@ -54,3 +54,19 @@ def test_missing_records_and_invalid_status(tmp_path):
 def test_external_llm_rejected():
     with pytest.raises(ValidationError):
         Settings(ollama_url="https://external.example.com")
+
+
+def test_transcript_available_when_extraction_failed(tmp_path):
+    from app.pipeline import Pipeline
+    from app.schemas import Segment
+    from app.storage import Store
+
+    with client_at(tmp_path) as client:
+        uploaded = client.post("/meetings", files={"file": ("meeting.wav", b"fixture")}).json()
+        mid = uploaded["id"]
+        Pipeline(Settings(data_dir=tmp_path)).save_transcript(
+            mid, "diarized", [Segment(start=0, end=1, text="Сохранённый текст", speaker_id="S0")])
+        Store(tmp_path).progress(mid, "failed", error="Test extraction failure")
+        response = client.get(f"/meetings/{mid}/transcript")
+        assert response.status_code == 200
+        assert response.json()[0]["text"] == "Сохранённый текст"

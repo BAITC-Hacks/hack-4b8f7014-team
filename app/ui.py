@@ -47,6 +47,11 @@ if meetings:
     st.write("Состояние:", selected["status"], selected.get("stage") or "")
     if selected.get("error"):
         st.error(selected["error"])
+        saved = request("GET", f"/meetings/{selected['id']}/transcript")
+        if saved:
+            with st.expander("Сохранённый транскрипт — доступен несмотря на ошибку"):
+                for segment in saved:
+                    st.text(f"[{segment['start']:.1f}–{segment['end']:.1f}] {segment['text']}")
     if selected["status"] == "completed":
         st.success("Эта запись уже обработана. Результат находится ниже. Для другого файла сначала нажмите «Загрузить запись».")
     elif selected["status"] in {"queued", "running"}:
@@ -102,7 +107,10 @@ if tasks:
         description = st.text_area("Поручение", chosen["description"])
         responsible = st.text_input("Ответственный", chosen["responsible"] or "")
         deadline = st.text_input("Срок YYYY-MM-DD (пусто, если неизвестен)", chosen["deadline"] or "")
-        st.caption("Основание: " + (chosen["evidence"] or "Добавлено вручную"))
+        if chosen.get("evidence_status") == "unverified":
+            st.warning("Цитата не подтверждена. Проверьте само поручение, ответственного и срок по транскрипту.")
+            st.caption("Неподтверждённая цитата модели: " + (chosen.get("proposed_evidence") or "—"))
+        st.caption("Основание: " + (chosen["evidence"] or "Нет подтверждённой цитаты"))
         reviewed = st.checkbox("Поручение, ответственный и срок проверены", not chosen["needs_review"])
         if st.form_submit_button("Сохранить проверку"):
             payload = {k: v for k, v in chosen.items() if k not in {"id", "meeting_id", "dashboard_status"}}

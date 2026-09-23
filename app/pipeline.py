@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from app.adapters import (
@@ -30,9 +31,20 @@ class Pipeline:
         normalize(media, wav, self.settings)
         progress("transcribing")
         segments = self.stt.transcribe(wav, meeting.options)
+        self.save_transcript(meeting.id, "stt", segments)
         progress("diarizing")
         segments = self.diarizer.attribute(wav, segments)
+        self.save_transcript(meeting.id, "diarized", segments)
         progress("extracting")
         summary, drafts = self.extractor.extract(segments, meeting.options)
         return Minutes(meeting_id=meeting.id, summary=summary, transcript=segments,
                        tasks=[Task(meeting_id=meeting.id, **draft.model_dump()) for draft in drafts])
+
+    def save_transcript(self, meeting_id, stage, segments):
+        directory = self.settings.data_dir / "transcripts"
+        directory.mkdir(parents=True, exist_ok=True)
+        destination = directory / f"{meeting_id}-{stage}.json"
+        temporary = destination.with_suffix(".tmp")
+        temporary.write_text(json.dumps([s.model_dump() for s in segments],
+                                        ensure_ascii=False), encoding="utf-8")
+        temporary.replace(destination)

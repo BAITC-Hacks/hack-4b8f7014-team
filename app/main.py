@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -12,6 +13,7 @@ from app.schemas import (
     Meeting,
     MinutesReview,
     ProcessOptions,
+    Segment,
     Task,
     TaskCreate,
     TaskReview,
@@ -82,6 +84,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if result is None:
             raise HTTPException(404, "Minutes not available yet")
         return result
+
+    @api.get("/meetings/{meeting_id}/transcript", response_model=list[Segment])
+    def saved_transcript(meeting_id: UUID):
+        if not store.has_meeting(meeting_id):
+            raise HTTPException(404, "Meeting not found")
+        minutes = store.minutes(meeting_id)
+        if minutes:
+            return minutes.transcript
+        for stage in ("diarized", "stt"):
+            path = settings.data_dir / "transcripts" / f"{meeting_id}-{stage}.json"
+            if path.is_file():
+                return [Segment.model_validate(s) for s in json.loads(path.read_text(encoding="utf-8"))]
+        return []
 
     @api.put("/meetings/{meeting_id}/minutes")
     def review_minutes(meeting_id: UUID, review: MinutesReview):

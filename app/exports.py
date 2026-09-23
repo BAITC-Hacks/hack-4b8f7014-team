@@ -21,7 +21,9 @@ def content_blocks(meeting, minutes):
         yield "text", f"Срок: {task.deadline or 'не указан'}; исходная формулировка: {task.deadline_text or '—'}"
         yield "text", f"Статус: {task.status.value}; требуется проверка: {'да' if task.needs_review else 'нет'}"
         yield "text", f"Срочность: {task.urgency or '—'}; направление: {task.category or '—'}"
-        yield "text", f"Основание: {task.evidence or 'добавлено вручную'}"
+        if task.evidence_status == "unverified":
+            yield "text", "ВНИМАНИЕ: поручение предложено ИИ, цитата не подтверждена. Нужна проверка по транскрипту."
+        yield "text", f"Основание: {task.evidence or ('не подтверждено' if task.evidence_status == 'unverified' else 'добавлено вручную')}"
     yield "heading", "Транскрипт"
     for segment in minutes.transcript:
         speaker = minutes.speakers.get(segment.speaker_id, segment.speaker_id or "Неизвестный")
