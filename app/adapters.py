@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import wave
 from collections import defaultdict
+from datetime import date
 from pathlib import Path
 
 import httpx
@@ -106,12 +107,18 @@ class LocalDiarizer:
 
     def attribute(self, wav, segments):
         offline_environment()
+        import numpy as np
         import torch
         from pyannote.audio import Pipeline
 
         pipeline = Pipeline.from_pretrained(str(self.settings.diarization_model_dir.resolve()))
         pipeline.to(torch.device(self.settings.device))
-        output = pipeline(str(wav))
+        # FFmpeg already produced mono 16 kHz PCM16; avoid platform-dependent torchcodec.
+        with wave.open(str(wav), "rb") as audio:
+            rate = audio.getframerate()
+            samples = np.frombuffer(audio.readframes(audio.getnframes()), dtype="<i2")
+        waveform = torch.from_numpy(samples.astype(np.float32) / 32768.0).unsqueeze(0)
+        output = pipeline({"waveform": waveform, "sample_rate": rate})
         turns = [(turn.start, turn.end, speaker) for turn, speaker in output.speaker_diarization]
         return align_speakers(segments, turns)
 
@@ -119,6 +126,9 @@ class LocalDiarizer:
 class ExtractedTask(TaskCreate):
     source_segment: int = Field(ge=0)
     evidence: str = Field(min_length=1)
+    responsible: str | None = Field(..., description="Explicitly named assignee, or null")
+    deadline_text: str | None = Field(..., description="Exact deadline wording from the transcript")
+    deadline: date | None = Field(..., description="ISO YYYY-MM-DD date if resolvable, otherwise null")
 
 
 class Extraction(BaseModel):
@@ -156,6 +166,9 @@ class LocalExtractor:
             "not necessarily the assignee. Keep original deadline wording in deadline_text. "
             "Resolve relative dates only if meeting_date is provided; otherwise use null. "
             "Do not invent dates. Set status pending. Summarize facts concisely."
+            " Always fill deadline_text when a date is mentioned. Example: with meeting_date "
+            "2025-03-01, 'до 5 марта' means deadline_text='до 5 марта', deadline='2025-03-05'. "
+            "Copy evidence verbatim including spelling and punctuation. Never correct names in evidence."
         )
         with httpx.Client(base_url=self.settings.ollama_url, timeout=300,
                           trust_env=False, follow_redirects=False) as client:

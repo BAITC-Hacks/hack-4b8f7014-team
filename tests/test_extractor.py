@@ -19,7 +19,8 @@ def test_extractor_validates_source(monkeypatch, evidence, valid):
         assert request.url.host == "127.0.0.1"
         return httpx.Response(200, json={"message": {"content": json.dumps({
             "summary": "Отчёт", "tasks": [{"description": "Сделать отчёт",
-            "source_segment": 0, "evidence": evidence, "speaker_id": "invented"}]})}})
+            "source_segment": 0, "evidence": evidence, "speaker_id": "invented",
+            "responsible": None, "deadline_text": None, "deadline": None}]})}})
 
     monkeypatch.setattr(httpx, "Client", lambda **kwargs: real_client(
         **kwargs, transport=httpx.MockTransport(handler)))

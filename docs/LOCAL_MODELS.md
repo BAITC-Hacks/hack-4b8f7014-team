@@ -1,0 +1,57 @@
+# Локальные модели и доступ
+
+Текущий начальный профиль: Whisper small (multilingual, CPU int8), Qwen2.5 7B
+Q4_K_M через Ollama, pyannote Community-1. Whisper small выбран для первого запуска
+на ноутбуке с 16 ГБ RAM; качество казахской речи отдельно не подтверждено.
+Файлы весов и runtime остаются в игнорируемых `models/` и `data/`, не в Git.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-local.txt
+.\.venv\Scripts\python.exe -m scripts.setup_models whisper
+```
+
+Для Community-1 нужно самостоятельно войти на
+[страницу модели](https://huggingface.co/pyannote/speaker-diarization-community-1),
+принять условия доступа и создать токен чтения в настройках Hugging Face.
+Введите его только в локальный терминал, не в чат, README или Git:
+
+```powershell
+.\.venv\Scripts\hf.exe auth login
+.\.venv\Scripts\python.exe -m scripts.setup_models diarization
+```
+
+Токен используется только для предварительного скачивания. Во время обработки
+`HF_HUB_OFFLINE=1`; облачная обработка не используется.
+
+Портативный Ollama: распакуйте официальный `ollama-windows-amd64.zip` из
+[релизов Ollama](https://github.com/ollama/ollama/releases) в `data/runtime/ollama`.
+Перед запуском сервера установите `OLLAMA_MODELS` в абсолютный путь `models/ollama`,
+`OLLAMA_HOST=127.0.0.1:11434`, `OLLAMA_NO_CLOUD=1`, затем выполните
+`ollama.exe serve` и в другом терминале `ollama.exe pull qwen2.5:7b`.
+После подготовки можно запускать `scripts/start-local.ps1`.
+
+В `.env`: `MINUTES_OLLAMA_MODEL=qwen2.5:7b`, CPU/int8 по умолчанию.
+Путь к FFmpeg можно получить командой
+`python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"`
+и сохранить в `MINUTES_FFMPEG`. Для pyannote Windows при проблемах torchcodec
+используйте загрузку подготовленного WAV в память (адаптер проекта).
+
+Подготовка требует интернета. После скачивания весов работа должна быть локальной.
+Наличие моделей не гарантирует качество: нужны реальные RU/KZ/смешанные записи
+с ручной разметкой. Начальный синтетический тест не является такой оценкой.
+
+## Проверено 23 сентября 2026
+
+Windows, Python 3.12, 16 ГБ RAM, RTX 4060 Laptop 8 ГБ. Установлены FFmpeg через
+imageio-ffmpeg, faster-whisper, Ollama 0.34.3, Qwen2.5 7B Q4_K_M и pyannote.audio.
+Whisper small на CPU распознал 19-секундную синтетическую запись; имя Айдана
+распознано как Айдена. Qwen 7B извлекла два поручения и даты 2026-09-25/2026-09-30,
+но имя требует ручной проверки. Qwen 3B в первом прогоне пропустила сроки.
+Оценка на RU/KZ/смешанной реальной речи ещё не выполнена.
+
+Полный прогон с диаризацией пока ожидает авторизованного скачивания Community-1.
+`requirements-windows-tested.txt` фиксирует установленное Windows-окружение,
+но не утверждает совместимость всех пакетов с Linux или другими версиями Python.
+Для воспроизведения частичной проверки: `scripts/make_test_audio.ps1`,
+затем `python -m scripts.smoke_local`. Скрипт выполняет настоящий STT и запрос
+локального LLM; диаризацию он не проверяет. Ни записи, ни веса, ни токены не коммитятся.
