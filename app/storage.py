@@ -145,6 +145,10 @@ class Store:
             if not set(review.speakers) <= known:
                 raise ValueError("Unknown speaker label")
             minutes.summary, minutes.speakers = review.summary, review.speakers
+            for field in ("organization", "topic", "report_points"):
+                value = getattr(review, field)
+                if value is not None:
+                    setattr(minutes, field, value)
             db.execute("UPDATE minutes SET payload = ? WHERE meeting_id = ?",
                        (minutes.model_dump_json(), str(meeting_id)))
         return self.minutes(meeting_id)

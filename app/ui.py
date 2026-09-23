@@ -70,12 +70,20 @@ if meetings:
         minutes = request("GET", f"/meetings/{selected['id']}/minutes")
         if minutes:
             with st.form(f"minutes_{selected['id']}"):
+                organization = st.text_input("Организация", minutes.get("organization", ""))
+                topic = st.text_input("Тема совещания", minutes.get("topic", ""))
                 summary = st.text_area("Краткое содержание", minutes["summary"], height=180)
+                report_points = st.data_editor(
+                    minutes.get("report_points") or [{"direction": "", "indicator": "", "problem": ""}],
+                    num_rows="dynamic", key=f"report_{selected['id']}",
+                    column_config={"direction": "Направление / доклад", "indicator": "Показатель", "problem": "Проблема"})
                 labels = sorted({s["speaker_id"] for s in minutes["transcript"] if s["speaker_id"]})
                 speakers = {label: st.text_input(f"Имя для {label}", minutes["speakers"].get(label, "")) for label in labels}
                 if st.form_submit_button("Сохранить саммари и имена"):
                     request("PUT", f"/meetings/{selected['id']}/minutes", json={
-                        "summary": summary, "speakers": {k: v for k, v in speakers.items() if v}})
+                        "summary": summary, "speakers": {k: v for k, v in speakers.items() if v},
+                        "organization": organization, "topic": topic,
+                        "report_points": [p for p in report_points if any(p.values())]})
             with st.expander("Транскрипт"):
                 for segment in minutes["transcript"]:
                     name = minutes["speakers"].get(segment["speaker_id"], segment["speaker_id"] or "Неизвестный")

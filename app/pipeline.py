@@ -38,6 +38,7 @@ class Pipeline:
         progress("extracting")
         summary, drafts = self.extractor.extract(segments, meeting.options)
         return Minutes(meeting_id=meeting.id, summary=summary, transcript=segments,
+                       report_points=getattr(self.extractor, "report_points", []),
                        tasks=[Task(meeting_id=meeting.id, **draft.model_dump()) for draft in drafts])
 
     def save_transcript(self, meeting_id, stage, segments):

@@ -63,9 +63,18 @@ class ProcessOptions(BaseModel):
     meeting_date: date | None = None
 
 
+class ReportPoint(BaseModel):
+    direction: str
+    indicator: str
+    problem: str
+
+
 class MinutesReview(BaseModel):
     summary: str = Field(max_length=50000)
     speakers: dict[str, str] = Field(default_factory=dict)
+    organization: str | None = None
+    topic: str | None = None
+    report_points: list[ReportPoint] | None = None
 
 
 class Meeting(BaseModel):
@@ -85,3 +94,6 @@ class Minutes(BaseModel):
     tasks: list[Task]
     # Explicit human mapping: diarization labels are not verified identities.
     speakers: dict[str, str] = Field(default_factory=dict)
+    organization: str = ""
+    topic: str = ""
+    report_points: list[ReportPoint] = Field(default_factory=list)

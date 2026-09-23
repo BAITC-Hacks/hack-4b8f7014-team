@@ -40,6 +40,9 @@ def test_queue_recovery_review_and_export(tmp_path):
     document = Document(BytesIO(export_docx(meeting, minutes)))
     text = "\n".join(p.text for p in document.paragraphs)
     assert "Айдана" in text and "Проверено" in text
+    assert text.index("Текст совещания") < text.index("Саммари по ключевым пунктам") < text.index("Поручения")
+    assert len(document.tables) == 2
+    assert [cell.text for cell in document.tables[1].rows[0].cells] == ["Поручение", "Ответственный", "Срок"]
     with pytest.raises(PipelineError):
         export_pdf(meeting, minutes, tmp_path / "missing.ttf")
     with pytest.raises(ValueError):
